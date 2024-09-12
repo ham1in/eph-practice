@@ -31,5 +31,5 @@ def ipie_fci(w0: float, g: float, t: float, nsites: int,
 
     return e[0]
 
-energy = ipie_fci(2, 0.1, 1, 4, 1, verbose=True)
+energy = ipie_fci(1, 0.5, 1, 2, 5, verbose=True)
 print(energy)
