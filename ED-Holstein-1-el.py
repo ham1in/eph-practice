@@ -1,38 +1,45 @@
 # Exact diagonalization code
 import numpy as np
 
-t= -1
-nbos = 10
-nsites = 64
+t = -1
+nbos = 2
+nsites = 4
 omega = 2
-g = 1.25
+g = 0.1
 
-H = np.zeros([(nbos+1)*nsites, (nbos+1)*nsites])
+b= np.zeros((nbos, nbos))
+for j in range(1, nbos):
+    b[j-1, j] = np.sqrt(j)
 
-for i in range((nbos+1) * nsites):
-  for j in range((nbos+1) * nsites):
-    mat_el = 0
-    if i == j:
-      mat_el += omega * (j%(nbos+1))
-    if abs(i-j)/(nbos+1) == 1 or abs(i-j)/(nbos+1) == (nsites-1):
-      mat_el += t
-    if abs(i-j) == 1 and i//(nbos + 1) == j//(nbos + 1):
-      if j%(nbos + 1) == 0:
-        mat_el +=g
-      elif j%(nbos + 1) == nbos:
-        mat_el +=g*np.sqrt(nbos)
-      elif j>i:
-        mat_el +=g*np.sqrt(j%(nbos + 1))
-      else:
-        mat_el +=g*np.sqrt(j%(nbos +1)+1)
+b_dagger = np.transpose(b)
 
-    H[i,j] = mat_el
+sum_b_b_dagger = b_dagger + b
 
-print(H)
+# No pbc
+hop = np.zeros((nsites,nsites))
+for j in range(1, nsites):
+    hop[j-1, j] = t
+    hop[j, j-1] = t
+
+ph_occ = np.dot(b_dagger, b)
+
+Id_ph = np.eye(nbos)
+Id_el = np.eye(nsites)
+
+
+H_el = np.kron(hop, Id_ph)
+H_b =  np.kron(Id_el, omega* ph_occ)
+H_elph = np.zeros((nsites*nbos, nsites*nbos))
+
+for i in range(nsites):
+    n_i = np.zeros((nsites,nsites))
+    n_i[i,i] = 1
+    el_ph = np.kron(n_i, g*sum_b_b_dagger)
+    H_elph += el_ph
+
+H = H_el + H_b + H_elph
+
+#print(np.size(H))
+print("Diagonalizing H")
 eigenvalues, eigenvectors = np.linalg.eig(H)
-print(min(eigenvalues))
-#print(eigenvectors[:,0])
-
-
-
-
+print((eigenvalues[0]))
