@@ -1,12 +1,13 @@
 # Exact diagonalization code
 import numpy as np
 import scipy.linalg as la
+#from scipy.sparse.linalg import eigsh
 
 t = -1
-nbos = 2
+nbos = 25
 nsites = 2
 omega = 1
-g = 0.5
+g = 2
 
 b= np.zeros((nbos, nbos))
 for j in range(1, nbos):
@@ -14,6 +15,7 @@ for j in range(1, nbos):
 
 
 b_dagger = np.transpose(b)
+
 sum_b_b_dagger = b_dagger + b
 
 # No pbc
@@ -24,6 +26,9 @@ for j in range(1, nsites):
 
 # With PBC
 hop[nsites-1, 0] = hop[0, nsites-1] = t
+
+if nsites == 2:
+    hop = 2 * hop
 
 ph_occ = np.dot(b_dagger, b)
 Id_ph = np.eye(nbos)
@@ -64,57 +69,77 @@ H = H_el + H_b + H_elph
 
 print("Diagonalizing H")
 eigenvalues, eigenvectors = np.linalg.eigh(H)
-print((eigenvalues[0]))
-
+print(np.min(eigenvalues))
 
 ks = np.fft.fftfreq(nsites) * 2 * np.pi
-ks = ks[ks<=0]
-ks = -ks
+#ks = np.linspace(0, 2 * np.pi, nsites, endpoint = True)
+print(ks)
 
 # q = p = ks
 Id_bos = np.eye(nbos**nsites)
 ctc = np.zeros((nsites, nsites), dtype = complex)
 for n in range(nsites):
     for m in range(nsites):
-        mom_sum = sum(p * np.exp(1j * p * (n - m)) for p in ks)
+        mom_sum = 1/nsites * sum(p * np.exp(1j * p * (n-m)) for p in ks)
         ctc[n, m] = mom_sum
 
 k_el = np.kron(ctc, Id_bos)
+com1 = np.dot(H, k_el) - np.dot(k_el, H)
+print("EL COMUT")
+print(com1)
+print(np.max(com1))
 
 k_b = np.zeros((nsites * nbos**nsites, nsites * nbos**nsites), dtype = complex)
-btb = np.zeros((nbos,nbos),dtype = complex)
-for n in range(nbos):
-    for m in range(nbos):
-        mom_sum = sum(p * np.exp(1j * p * (n-m)) for p in ks)
-        btb[n,m] = mom_sum
 
+for n in range(nsites):
+    for m in range(nsites):
+        mom_sum = 1/nsites * sum(p * np.exp(1j * p * (n-m)) for p in ks)
+        mats = [Id_ph] * nsites
+        res = Id_el
+        if n == m:
+            mats[n] = mom_sum * ph_occ
+            for mat in mats:
+                res = np.kron(res, mat)
+            k_b += res
+        else:
+            mats[n] = b_dagger
+            mats[m] = mom_sum * b
+            for mat in mats:
+                res = np.kron(res, mat)
+            k_b += res
+
+k_op = k_el +  k_b
+
+print("BOSON COMMT")
+cos2 = np.dot(H, k_b) - np.dot(k_b, H)
+print(cos2)
+print(np.max(cos2))
+commut = np.dot(H, k_op) - np.dot(k_op, H)
+
+mom_specified = ks[0]
+print("PROJECTED K:")
+
+p_k = np.zeros((nsites * nbos**nsites, nsites * nbos**nsites), dtype = complex)
 for i in range(nsites):
-    mats = [Id_ph] * nsites
-    mats[i] = btb
-    res = Id_el
-    for mat in mats:
-        res = np.kron(res,mat)
-    k_b += res
+    exponent = -1j * k_op * i
+    coeff = np.exp(1j * mom_specified * i)
+    p_k += coeff * la.expm(exponent)
 
-k_op = k_el + k_b
+com = np.dot(H, p_k) - np.dot(p_k, H)
+print("COM")
+print(com)
+print(np.max(com))
+finding_k_vals = np.dot(p_k, eigenvectors)
 
-mom_specified = ks[1]
+columns = []
+for i in range(finding_k_vals.shape[0]):
+    vec = finding_k_vals[:,i]
+    norm = np.linalg.norm(vec)
+    if norm > 1e-8:
+        columns.append(i)
 
-k = np.ones((nsites * nbos**nsites, nsites * nbos**nsites), dtype = complex)
 
-difference = 1j * (k - k_op) 
 
-p_k_mat = np.zeros((nsites * nbos**nsites, nsites * nbos**nsites), dtype = complex)
-for i in range(nsites):
-    exponent = difference  * (i+1)
-    p_k_mat += la.expm(exponent)
-
-finding_k_vals = np.dot(p_k_mat, eigenvectors)
-threshold = 1e-6
-# Find indices where the magnitude of the complex values is close to zero
-close_to_zero = np.abs(finding_k_vals) < threshold
-indices = np.argwhere(close_to_zero)
-print(finding_k_vals[indices])
 
 
 
